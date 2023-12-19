@@ -1,0 +1,97 @@
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Final Project for "Practical Machine Learning"
+
+## Setup Project
+
+Download the training and test data using these links: 
+
+Train: <https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv>
+
+Test: <https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>
+
+Next, load all necessary libraries:
+```{r load libs, message= FALSE, warning=FALSE}
+library(caret)
+library(AppliedPredictiveModeling)
+library(randomForest)
+```
+
+## Load and preprocess data
+
+Next, I loaded the data.I noticed that there where many columns that appear to be empty 
+
+```{r preprocessing}
+train_data_raw <- read.csv("pml-training.csv")
+test_data_raw <- read.csv("pml-testing.csv")
+
+
+#frist impression: lot of NAs and empty cells, fill empty cells with NA, confirm with:
+train_data_raw[train_data_raw == ''] <- NA
+test_data_raw[test_data_raw == ''] <- NA
+number_na <- colSums(is.na(train_data_raw))
+unique(number_na)
+```
+
+From the unique values (0 or 19216) we can see, that the columns are either complete or empty, there are no "half-filled" columns. So it's safe to remove them. 
+
+```{r preprocessing3}
+
+#remove all columns that only contain NAs
+train_data_complete <- train_data_raw[,(colSums(is.na(train_data_raw))==0)]
+test_data_complete <- test_data_raw[,(colSums(is.na(test_data_raw))==0)]
+```
+
+Since the description of the dataset says: "This human activity recognition research has traditionally focused on discriminating between different activities, i.e. to predict "which" activity was performed at a specific point in time (like with the Daily Living Activities dataset above)"
+I understand that we have to make a prediction for each line, disregarding any potential time component.
+
+```{r preprocessing2}
+#remove all columns that contain information about time or user
+train_data_reduced <- train_data_complete[,8:ncol(train_data_complete)]
+test_data_reduced <- test_data_complete[,8:ncol(test_data_complete)]
+
+
+#scale all columns except for "Classe" because they have different orders of magnitude
+train_data_scaled <- as.data.frame(scale(train_data_reduced[,1:(ncol(train_data_reduced)-1)]))
+test_data_scaled <- as.data.frame(scale(test_data_reduced[,1:(ncol(test_data_reduced)-1)]))
+
+#make "Classe" a factor variable
+train_data_scaled$classe <- factor(train_data_reduced$classe)
+
+#Split data 
+inTrain = createDataPartition(train_data_scaled$classe , p = 0.7)[[1]]
+data_training = train_data_scaled[ inTrain,]
+data_testing = train_data_scaled[-inTrain,]
+```
+
+## Train Models
+
+First I tried to use a "normal" tree. 
+
+```{r tree}
+#Classification Tree
+class_tree <- train(classe ~ ., method = "rpart", data = data_training)
+tree_pred <- predict(class_tree, newdata = data_testing)
+confusionMatrix(tree_pred, data_testing$classe)
+```
+
+As you can see, the accuracy is around 0.5, which is quite bad. So I tried to use a random forest next: 
+
+```{r randomforest}
+
+class_forest <- train(classe ~ ., method = "rf", data = data_training)
+forest_pred <- predict(class_forest, newdata = data_testing)
+confusionMatrix(forest_pred, data_testing$classe)
+
+```
+
+The accuracy is 0.99, which is very good. So I use this model to predict. 
+
+
+```{r predict, eval=FALSE}
+#predict with test data
+predict(class_forest, test_data_scaled)
+```
